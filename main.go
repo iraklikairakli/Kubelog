@@ -15,12 +15,13 @@ type CommandOptions struct {
 	SearchText      string
 	PodNames        []string
 	DeploymentNames []string
+	Namespace       string // Added namespace field
 }
 
-func streamLogs(podName, searchText string, wg *sync.WaitGroup) {
+func streamLogs(podName, searchText, namespace string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	cmd := exec.Command("kubectl", "logs", "-f", podName, "--tail=10")
+	cmd := exec.Command("kubectl", "logs", "-f", podName, "-n", namespace, "--tail=10")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating StdoutPipe for Cmd: %v\n", err)
@@ -47,8 +48,8 @@ func streamLogs(podName, searchText string, wg *sync.WaitGroup) {
 
 }
 
-func getPodsByLabel(labelSelector string) ([]string, error) {
-	cmd := exec.Command("kubectl", "get", "pods", "-l", labelSelector, "-o", "jsonpath={.items[*].metadata.name}")
+func getPodsByLabel(labelSelector, namespace string) ([]string, error) {
+	cmd := exec.Command("kubectl", "get", "pods", "-l", labelSelector, "-n", namespace, "-o", "jsonpath={.items[*].metadata.name}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("error fetching pods: %v", err)
@@ -57,8 +58,8 @@ func getPodsByLabel(labelSelector string) ([]string, error) {
 	return podNames, nil
 }
 
-func getPodsByDeployment(deploymentName string) ([]string, error) {
-	cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-o", "jsonpath={.spec.selector.matchLabels}")
+func getPodsByDeployment(deploymentName, namespace string) ([]string, error) {
+	cmd := exec.Command("kubectl", "get", "deployment", deploymentName, "-n", namespace, "-o", "jsonpath={.spec.selector.matchLabels}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("error fetching deployment selector: %v", err)
@@ -75,13 +76,21 @@ func getPodsByDeployment(deploymentName string) ([]string, error) {
 	}
 	labelSelector := strings.Join(selectorParts, ",")
 
-	return getPodsByLabel(labelSelector)
+	return getPodsByLabel(labelSelector, namespace)
 }
 
 func parseArgs(args []string) CommandOptions {
 	var opts CommandOptions
+
+	opts.Namespace = "default" // Default namespace
+
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "-n":
+			if i+1 < len(args) {
+				opts.Namespace = args[i+1]
+				i++
+			}
 		case "-p":
 			opts.Mode = "pod"
 			opts.PodNames = append(opts.PodNames, args[i+1])
@@ -135,26 +144,26 @@ func parseArgs(args []string) CommandOptions {
 	return opts
 }
 
-func handlePods(pods []string, searchText string) {
+func handlePods(pods []string, searchText, namespace string) {
 	var wg sync.WaitGroup
 	for _, pod := range pods {
 		wg.Add(1)
-		go streamLogs(pod, searchText, &wg)
+		go streamLogs(pod, searchText, namespace, &wg)
 	}
 	wg.Wait()
 }
 
-func handleDeployments(deployments []string, searchText string) {
+func handleDeployments(deployments []string, searchText, namespace string) {
 	var wg sync.WaitGroup
 	for _, deploy := range deployments {
-		pods, err := getPodsByDeployment(deploy)
+		pods, err := getPodsByDeployment(deploy, namespace)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to get pods for deployment %s: %v\n", deploy, err)
 			continue
 		}
 		for _, pod := range pods {
 			wg.Add(1)
-			go streamLogs(pod, searchText, &wg)
+			go streamLogs(pod, searchText, namespace, &wg)
 		}
 	}
 	wg.Wait()
@@ -165,13 +174,13 @@ func main() {
 
 	switch opts.Mode {
 	case "pod", "pod_find":
-		handlePods(opts.PodNames, opts.SearchText)
+		handlePods(opts.PodNames, opts.SearchText, opts.Namespace)
 	case "pod_multi", "find_multi":
-		handlePods(opts.PodNames, opts.SearchText)
+		handlePods(opts.PodNames, opts.SearchText, opts.Namespace)
 	case "deploy", "deploy_find":
-		handleDeployments(opts.DeploymentNames, opts.SearchText)
+		handleDeployments(opts.DeploymentNames, opts.SearchText, opts.Namespace)
 	case "deploy_multi", "find_multi_deploy":
-		handleDeployments(opts.DeploymentNames, opts.SearchText)
+		handleDeployments(opts.DeploymentNames, opts.SearchText, opts.Namespace)
 	default:
 		fmt.Println("Invalid command. Usage:")
 		// ... print usage instructions ...
