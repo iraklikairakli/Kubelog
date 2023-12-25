@@ -1,7 +1,10 @@
 # Kubelog
 
 
-![alt text]([http://url/to/img.png](https://ibb.co/RbGtS7X))
+
+![Logo](https://i.ibb.co/qjLhnxH/c8ae24be-7031-4682-b41d-e314f9f99be7.webp)
+
+
 
 ## Getting started
 
