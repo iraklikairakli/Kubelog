@@ -15,11 +15,31 @@ type CommandOptions struct {
 	SearchText      string
 	PodNames        []string
 	DeploymentNames []string
-	Namespace       string // Added namespace field
+	Namespace       string
 }
 
-func streamLogs(podName, searchText, namespace string, wg *sync.WaitGroup) {
+var colors = []string{
+	"\033[31m", // Red
+	"\033[32m", // Green
+	"\033[33m", // Yellow
+	"\033[34m", // Blue
+	"\033[35m", // Magenta
+	"\033[36m", // Cyan
+	"\033[37m", // White
+}
+
+func getColorCode(podName string, podColorMap map[string]string) string {
+	if color, exists := podColorMap[podName]; exists {
+		return color
+	}
+	color := colors[len(podColorMap)%len(colors)]
+	podColorMap[podName] = color
+	return color
+}
+
+func streamLogs(podName, searchText, namespace string, wg *sync.WaitGroup, podColorMap map[string]string) {
 	defer wg.Done()
+	colorCode := getColorCode(podName, podColorMap)
 
 	cmd := exec.Command("kubectl", "logs", "-f", podName, "-n", namespace, "--tail=10")
 	stdout, err := cmd.StdoutPipe()
@@ -37,7 +57,7 @@ func streamLogs(podName, searchText, namespace string, wg *sync.WaitGroup) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if searchText == "" || strings.Contains(line, searchText) {
-			fmt.Printf("[%s] %s\n", podName, line)
+			fmt.Printf("%s[%s]%s %s\n", colorCode, podName, "\033[0m", line)
 		}
 	}
 
@@ -106,6 +126,18 @@ func parseArgs(args []string) CommandOptions {
 				opts.PodNames = append(opts.PodNames, args[j])
 				i = j
 			}
+		case "-fmp":
+			opts.Mode = "find_multi_pods"
+			i++
+			// Loop to add pod names. Stop one argument before the end to ensure the last argument is treated as search text.
+			for ; i < len(args)-1 && !strings.HasPrefix(args[i], "-"); i++ {
+				opts.PodNames = append(opts.PodNames, args[i])
+			}
+			// The last argument is the search text
+			if i < len(args) {
+				opts.SearchText = args[i]
+			}
+
 		case "-fm":
 			opts.Mode = "find_multi"
 			for j := i + 1; j < len(args) && args[j] != "-f"; j++ {
@@ -141,20 +173,23 @@ func parseArgs(args []string) CommandOptions {
 			}
 		}
 	}
+	fmt.Println("Final parsed options:", opts) // Debugging print
 	return opts
 }
 
 func handlePods(pods []string, searchText, namespace string) {
 	var wg sync.WaitGroup
+	podColorMap := make(map[string]string)
 	for _, pod := range pods {
 		wg.Add(1)
-		go streamLogs(pod, searchText, namespace, &wg)
+		go streamLogs(pod, searchText, namespace, &wg, podColorMap)
 	}
 	wg.Wait()
 }
 
 func handleDeployments(deployments []string, searchText, namespace string) {
 	var wg sync.WaitGroup
+	podColorMap := make(map[string]string) // Added to support color mapping
 	for _, deploy := range deployments {
 		pods, err := getPodsByDeployment(deploy, namespace)
 		if err != nil {
@@ -163,7 +198,7 @@ func handleDeployments(deployments []string, searchText, namespace string) {
 		}
 		for _, pod := range pods {
 			wg.Add(1)
-			go streamLogs(pod, searchText, namespace, &wg)
+			go streamLogs(pod, searchText, namespace, &wg, podColorMap)
 		}
 	}
 	wg.Wait()
@@ -175,11 +210,15 @@ func main() {
 	switch opts.Mode {
 	case "pod", "pod_find":
 		handlePods(opts.PodNames, opts.SearchText, opts.Namespace)
-	case "pod_multi", "find_multi":
+	case "pod_multi":
+		handlePods(opts.PodNames, "", opts.Namespace)
+	case "find_multi_pods":
 		handlePods(opts.PodNames, opts.SearchText, opts.Namespace)
 	case "deploy", "deploy_find":
 		handleDeployments(opts.DeploymentNames, opts.SearchText, opts.Namespace)
-	case "deploy_multi", "find_multi_deploy":
+	case "deploy_multi":
+		handleDeployments(opts.DeploymentNames, "", opts.Namespace)
+	case "find_multi_deploy":
 		handleDeployments(opts.DeploymentNames, opts.SearchText, opts.Namespace)
 	default:
 		fmt.Println("Invalid command. Usage:")
