@@ -1,5 +1,5 @@
 // executor.go (located in pkg/myapp/)
-package myapp
+package kubelog
 
 import (
 	"bufio"
