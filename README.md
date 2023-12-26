@@ -29,7 +29,7 @@ Before you begin, ensure you have met the following requirements:
 * Multiple Deploy with search ```-fmd``` ,```kubelog -pf Deployment_name1 Deployment_name2 "search_text" ```
 
 
-### Instalation Method - Linux
+### Instalation Method - Linux (Makefile)
 ```shell
 git clone https://github.com/iraklikairakli/Kubelog.git
 cd kubelog
@@ -37,3 +37,10 @@ make build
 make install
 ```
 now you can use kubelog command 
+
+### Instalation Method - Linux (Binary)
+```shell
+wget https://github.com/iraklikairakli/Kubelog/releases/download/v1.0.1/kubelog
+mv kubelog /usr/local/bin/
+sudo chmod +x /usr/local/bin/kubelog
+```
