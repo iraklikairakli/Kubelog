@@ -1,4 +1,4 @@
-# Kubelog 
+# Kubelog
 
 ![Logo](https://i.ibb.co/qjLhnxH/c8ae24be-7031-4682-b41d-e314f9f99be7.webp)
 
@@ -36,7 +36,7 @@ cd kubelog
 make build
 make install
 ```
-now you can use kubelog command 
+now you can use kubelog command
 
 ### Instalation Method - Linux (Binary)
 ```shell
